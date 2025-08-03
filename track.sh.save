@@ -1,5 +1,4 @@
 #!/bin/bash
-
 LOG_FILE="$HOME/.work_log.txt"
 DATE=$(date +"%Y-%m-%d")
 TIME=$(date +"%H:%M:%S")
@@ -34,33 +33,44 @@ case "$1" in
       breaktime = 0
       prev_time = 0
       prev_state = ""
-      calc = 0
+      found_newday = 0
     }
 
     /^--- NEW DAY ---/ {
-      calc = 1
+      found_newday = NR
       next
     }
 
-    calc == 1 {
-      cur_time = to_epoch($1, $2)
-      cmd = $3
-
-      if (prev_time > 0) {
-        delta = cur_time - prev_time
-        if (prev_state == "resume") {
-          work += delta
-        } else if (prev_state == "pause") {
-          breaktime += delta
-        }
-      }
-      prev_time = cur_time
-      prev_state = cmd
+    {
+      log_lines[NR] = $0
     }
 
     END {
-      printf "Total work time (since last newday): %.2f hours\n", work / 3600
-      printf "Total break time (since last newday): %.2f hours\n", breaktime / 3600
+      for (i = found_newday + 1; i <= NR; i++) {
+        split(log_lines[i], parts, ",")
+        if (length(parts) < 3) continue
+        cur_time = to_epoch(parts[1], parts[2])
+        cmd = parts[3]
+
+        if (prev_time > 0) {
+          delta = cur_time - prev_time
+          if (prev_state == "resume") {
+            work += delta
+          } else if (prev_state == "pause") {
+            breaktime += delta
+          }
+        }
+
+        prev_time = cur_time
+        prev_state = cmd
+      }
+
+      if (work == 0 && breaktime == 0) {
+        print "No work or break data found after the last newday."
+      } else {
+        printf "Total work time (since last newday): %.2f hours\n", work / 3600
+        printf "Total break time (since last newday): %.2f hours\n", breaktime / 3600
+      }
     }
     ' "$LOG_FILE"
     ;;
@@ -69,4 +79,5 @@ case "$1" in
     echo "Usage: ./track.sh resume | pause | calculate | newday"
     ;;
 esac
+
 
